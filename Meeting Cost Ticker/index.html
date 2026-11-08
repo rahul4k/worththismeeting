@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meeting Cost Live — Minimalist Expense Ticker</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+          colors: {
+            noir: {
+              950: '#060709',
+              900: '#0a0c10',
+              850: '#11141a',
+              800: '#1a1f29',
+              700: '#2b3240',
+              400: '#8b95a5',
+              200: '#d0d6e0'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Tabular figures for stable ticker counter width without jitter */
+    .tabular-ticker {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.04em;
+    }
+    
+    /* Subtle pulsating dot for active sessions */
+    @keyframes subtlePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.9); }
+    }
+    .pulse-dot {
+      animation: subtlePulse 2s infinite ease-in-out;
+    }
+
+    /* Global smooth theme transitions */
+    body, header, main, footer, section, div, button, input, span {
+      transition-property: background-color, border-color, color, fill, stroke;
+      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      transition-duration: 150ms;
+    }
+  </style>
+</head>
+<body class="bg-white dark:bg-noir-950 text-slate-900 dark:text-slate-100 font-sans min-h-screen flex flex-col justify-between selection:bg-slate-900 selection:text-white dark:selection:bg-white dark:selection:text-black antialiased">
+
+  <!-- Minimal Header -->
+  <header class="w-full max-w-4xl mx-auto px-5 sm:px-8 pt-6 sm:pt-8 flex items-center justify-between">
+    <div class="flex items-center space-x-2.5">
+      <div class="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400" id="header-status-indicator"></div>
+      <span class="text-xs tracking-wider uppercase font-semibold text-slate-500 dark:text-noir-400 font-mono">meeting cost live</span>
+    </div>
+
+    <!-- Currency, Theme Toggle & Settings Toggle -->
+    <div class="flex items-center space-x-2">
+      <!-- Currency Switcher -->
+      <div class="flex items-center bg-slate-100 dark:bg-noir-900 border border-slate-200 dark:border-noir-800 rounded-lg p-0.5 text-xs font-mono">
+        <button class="currency-btn px-2.5 py-1 rounded text-slate-600 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white transition" data-curr="$">$</button>
+        <button class="currency-btn px-2.5 py-1 rounded text-slate-600 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white transition" data-curr="₹">₹</button>
+        <button class="currency-btn px-2.5 py-1 rounded text-slate-600 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white transition" data-curr="€">€</button>
+        <button class="currency-btn px-2.5 py-1 rounded text-slate-600 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white transition" data-curr="£">£</button>
+      </div>
+
+      <!-- Theme Switcher (Sun / Moon) -->
+      <button id="btn-theme-toggle" class="p-1.5 rounded-lg border border-slate-200 dark:border-noir-800 bg-slate-100 dark:bg-noir-900 text-slate-600 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center cursor-pointer" title="Toggle Theme (Light / Dark)">
+        <!-- Sun icon (shown in dark mode) -->
+        <svg id="icon-sun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+        <!-- Moon icon (shown in light mode) -->
+        <svg id="icon-moon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+      </button>
+
+      <!-- Settings Toggle -->
+      <button id="btn-toggle-options" class="text-xs font-mono text-slate-600 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-noir-800 bg-slate-100 dark:bg-noir-900 hover:bg-slate-200 dark:hover:bg-noir-850 px-2.5 py-1 rounded-lg transition flex items-center gap-1.5">
+        <span id="options-label">Settings</span>
+        <svg id="options-chevron" class="w-3.5 h-3.5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Centerpiece -->
+  <main class="w-full max-w-3xl mx-auto px-5 sm:px-8 py-8 sm:py-12 flex-1 flex flex-col justify-center items-center">
+    
+    <!-- Meeting Topic (Editable in-place) -->
+    <div class="mb-4 text-center w-full max-w-md">
+      <input type="text" id="meeting-title" placeholder="Untitled Meeting..." class="bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-noir-800 focus:border-slate-400 dark:focus:border-noir-700 text-center text-xs sm:text-sm font-medium text-slate-500 dark:text-noir-400 hover:text-slate-700 dark:hover:text-slate-300 focus:text-slate-900 dark:focus:text-white outline-none py-1 w-full transition placeholder-slate-400 dark:placeholder-noir-700">
+    </div>
+
+    <!-- Active State Pill -->
+    <div class="flex items-center gap-2 mb-2">
+      <span id="status-badge" class="inline-flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-slate-500 dark:text-noir-400 py-0.5 px-2.5 rounded-full bg-slate-100 dark:bg-noir-900 border border-slate-200 dark:border-noir-800">
+        <span id="status-dot" class="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-noir-700"></span>
+        <span id="status-text">Standby</span>
+      </span>
+    </div>
+
+    <!-- Hero Cost Counter -->
+    <div class="text-center my-6 sm:my-8 select-none">
+      <div class="flex items-baseline justify-center font-mono">
+        <span id="curr-symbol" class="text-3xl sm:text-5xl font-light text-slate-400 dark:text-noir-400 mr-2 sm:mr-3">$</span>
+        <span id="cost-display" class="tabular-ticker text-6xl sm:text-8xl md:text-9xl font-bold tracking-tight text-slate-950 dark:text-white">0.00</span>
+      </div>
+
+      <!-- Live Burn Rate & Sub-metric -->
+      <div class="mt-4 flex items-center justify-center space-x-3 text-xs font-mono text-slate-500 dark:text-noir-400">
+        <span id="burn-rate-hour">$0.00 / hr</span>
+        <span>•</span>
+        <span id="burn-rate-min" class="text-slate-700 dark:text-noir-200">$0.00 / min</span>
+      </div>
+    </div>
+
+    <!-- Timer Elapsed Display -->
+    <div class="font-mono text-xl sm:text-2xl font-light text-slate-700 dark:text-noir-200 tracking-wider mb-8 tabular-ticker">
+      <span id="timer-display">00:00:00</span>
+    </div>
+
+    <!-- Controls Toolbar -->
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-sm justify-center mb-8">
+      
+      <!-- Start / Pause / Resume Button -->
+      <button id="btn-primary" class="w-full sm:w-auto flex-1 py-3.5 px-8 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-black font-semibold text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 cursor-pointer">
+        <span id="btn-primary-icon">▶</span>
+        <span id="btn-primary-text">Start Meeting</span>
+      </button>
+
+      <div class="flex items-center space-x-2 w-full sm:w-auto">
+        <!-- End & Settle Button -->
+        <button id="btn-end" disabled class="flex-1 sm:flex-none py-3.5 px-5 rounded-full bg-slate-100 dark:bg-noir-900 text-slate-400 dark:text-noir-700 border border-slate-200 dark:border-noir-800 font-medium text-xs font-mono transition cursor-not-allowed" title="End and generate summary">
+          End & Settle
+        </button>
+
+        <!-- Reset Button -->
+        <button id="btn-reset" class="py-3.5 px-4 rounded-full bg-slate-100 dark:bg-noir-900 hover:bg-slate-200 dark:hover:bg-noir-850 text-slate-600 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-noir-800 transition text-xs font-mono cursor-pointer" title="Reset (Hotkey: R)">
+          Reset
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Quick Presets Pills -->
+    <div class="flex flex-wrap items-center justify-center gap-2 mb-8">
+      <span class="text-[11px] font-mono text-slate-400 dark:text-noir-700 uppercase tracking-wider mr-1">Presets:</span>
+      <button class="preset-pill px-3 py-1 rounded-full text-xs font-mono text-slate-600 dark:text-noir-400 bg-slate-100 dark:bg-noir-900 hover:bg-slate-200 dark:hover:bg-noir-850 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-noir-800 transition" data-attendees="2" data-rate="60">
+        1:1 Sync (2p @ $60)
+      </button>
+      <button class="preset-pill px-3 py-1 rounded-full text-xs font-mono text-slate-600 dark:text-noir-400 bg-slate-100 dark:bg-noir-900 hover:bg-slate-200 dark:hover:bg-noir-850 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-noir-800 transition" data-attendees="6" data-rate="75">
+        Standup (6p @ $75)
+      </button>
+      <button class="preset-pill px-3 py-1 rounded-full text-xs font-mono text-slate-600 dark:text-noir-400 bg-slate-100 dark:bg-noir-900 hover:bg-slate-200 dark:hover:bg-noir-850 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-noir-800 transition" data-attendees="8" data-rate="150">
+        Exec Sync (8p @ $150)
+      </button>
+    </div>
+
+    <!-- Expandable Options / Configuration Panel -->
+    <section id="options-panel" class="w-full max-w-lg bg-slate-50 dark:bg-noir-900 border border-slate-200 dark:border-noir-800 rounded-2xl p-5 sm:p-6 transition-all duration-200">
+      <div class="flex items-center justify-between border-b border-slate-200 dark:border-noir-800 pb-3 mb-5">
+        <h2 class="text-xs font-mono font-semibold uppercase tracking-wider text-slate-600 dark:text-noir-400">Meeting Parameters</h2>
+        <span class="text-[10px] font-mono text-slate-400 dark:text-noir-700">Autosaved</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        
+        <!-- Attendees Counter with Tactile Steppers -->
+        <div>
+          <label class="block text-xs font-medium text-slate-600 dark:text-noir-400 mb-1.5" for="attendees-input">Attendees</label>
+          <div class="flex items-center bg-white dark:bg-noir-950 border border-slate-200 dark:border-noir-800 rounded-xl p-1">
+            <button id="btn-attendee-minus" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-noir-900 hover:bg-slate-200 dark:hover:bg-noir-800 text-slate-700 dark:text-noir-200 font-mono text-base flex items-center justify-center transition active:scale-95">−</button>
+            <input type="number" id="attendees-input" min="1" max="1000" value="4" class="w-full bg-transparent text-center font-mono text-sm text-slate-900 dark:text-white focus:outline-none py-1">
+            <button id="btn-attendee-plus" class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-noir-900 hover:bg-slate-200 dark:hover:bg-noir-800 text-slate-700 dark:text-noir-200 font-mono text-base flex items-center justify-center transition active:scale-95">+</button>
+          </div>
+        </div>
+
+        <!-- Hourly Rate Input -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs font-medium text-slate-600 dark:text-noir-400" for="rate-input">Avg. Hourly Rate</label>
+            <span class="text-[10px] font-mono text-slate-400 dark:text-noir-700">per person</span>
+          </div>
+          <div class="flex items-center bg-white dark:bg-noir-950 border border-slate-200 dark:border-noir-800 rounded-xl px-3 py-1.5">
+            <span id="rate-symbol" class="text-xs font-mono text-slate-500 dark:text-noir-400 mr-1.5">$</span>
+            <input type="number" id="rate-input" min="1" step="5" value="75" class="w-full bg-transparent font-mono text-sm text-slate-900 dark:text-white focus:outline-none">
+          </div>
+        </div>
+
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-slate-200/80 dark:border-noir-800/60 flex items-center justify-between text-[11px] font-mono text-slate-400 dark:text-noir-700">
+        <span>Hotkeys: [Space] Start/Pause • [R] Reset</span>
+        <span>Runs 100% locally</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Clean Minimalist Receipt Slide-Up Modal -->
+  <div id="receipt-modal" class="fixed inset-0 bg-slate-900/40 dark:bg-noir-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-150">
+    <div id="receipt-card" class="bg-white dark:bg-noir-900 border border-slate-200 dark:border-noir-800 rounded-2xl max-w-md w-full p-6 shadow-2xl transform translate-y-4 sm:translate-y-0 sm:scale-95 transition-all duration-150">
+      
+      <div class="flex items-start justify-between border-b border-slate-200 dark:border-noir-800 pb-3 mb-4">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white tracking-tight" id="receipt-topic">Meeting Summary</h3>
+          <p class="text-[11px] font-mono text-slate-500 dark:text-noir-400 mt-0.5">Session settled and archived</p>
+        </div>
+        <button id="btn-receipt-close-x" class="text-slate-400 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white text-base leading-none p-1 font-mono">✕</button>
+      </div>
+
+      <div class="space-y-3 font-mono text-xs mb-6">
+        <div class="flex justify-between items-center py-1 border-b border-slate-200/80 dark:border-noir-800/50">
+          <span class="text-slate-500 dark:text-noir-400">Total Billed Cost</span>
+          <span class="text-lg font-bold text-slate-900 dark:text-white tabular-ticker" id="receipt-total">$0.00</span>
+        </div>
+        <div class="flex justify-between items-center py-0.5">
+          <span class="text-slate-500 dark:text-noir-400">Elapsed Time</span>
+          <span class="text-slate-700 dark:text-slate-200 tabular-ticker" id="receipt-duration">00:00:00</span>
+        </div>
+        <div class="flex justify-between items-center py-0.5">
+          <span class="text-slate-500 dark:text-noir-400">Attendees</span>
+          <span class="text-slate-700 dark:text-slate-200" id="receipt-attendees">4</span>
+        </div>
+        <div class="flex justify-between items-center py-0.5">
+          <span class="text-slate-500 dark:text-noir-400">Rate Basis</span>
+          <span class="text-slate-700 dark:text-slate-200" id="receipt-rate">$75 / hr</span>
+        </div>
+        <div class="flex justify-between items-center py-0.5">
+          <span class="text-slate-500 dark:text-noir-400">Cost / Minute</span>
+          <span class="text-slate-700 dark:text-slate-200" id="receipt-per-minute">$0.00</span>
+        </div>
+        <div class="flex justify-between items-center py-0.5">
+          <span class="text-slate-500 dark:text-noir-400">Cost / Attendee</span>
+          <span class="text-slate-700 dark:text-slate-200" id="receipt-per-person">$0.00</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btn-copy-receipt" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-black font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-1.5">
+          <span id="copy-receipt-text">Copy Summary</span>
+        </button>
+        <button id="btn-receipt-close" class="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-noir-850 dark:hover:bg-noir-800 text-slate-700 dark:text-noir-200 text-xs font-mono transition cursor-pointer">
+          Dismiss
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Reset Confirmation Modal -->
+  <div id="reset-modal" class="fixed inset-0 bg-slate-900/40 dark:bg-noir-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-150">
+    <div class="bg-white dark:bg-noir-900 border border-slate-200 dark:border-noir-800 rounded-2xl max-w-xs w-full p-5 shadow-2xl">
+      <h4 class="text-sm font-semibold text-slate-900 dark:text-white">Reset meeting counter?</h4>
+      <p class="text-xs text-slate-500 dark:text-noir-400 mt-1.5 leading-relaxed">This will reset accumulated time and cost to zero.</p>
+      <div class="mt-4 flex justify-end space-x-2">
+        <button id="btn-reset-cancel" class="px-3 py-1.5 rounded-lg text-xs font-mono text-slate-500 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white transition">Cancel</button>
+        <button id="btn-reset-confirm" class="px-3 py-1.5 rounded-lg text-xs font-mono bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/30 hover:bg-rose-500/20 dark:hover:bg-rose-500/30 transition">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 flex items-center bg-slate-900 text-white dark:bg-white dark:text-black text-xs font-medium px-4 py-2 rounded-lg shadow-xl transform translate-y-12 opacity-0 transition duration-150 pointer-events-none z-50">
+    <span id="toast-msg">Copied to clipboard</span>
+  </div>
+
+  <!-- Footer -->
+  <footer class="w-full max-w-4xl mx-auto px-5 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-slate-500 dark:text-noir-400 gap-2">
+    <div class="flex items-center gap-1.5">
+      <span>Made with <span class="text-rose-500 inline-block animate-pulse">❤️</span> from</span>
+      <a href="https://rahul4k.github.io/portfolio-website/" target="_blank" rel="noopener noreferrer" class="font-semibold text-slate-900 dark:text-slate-100 underline decoration-slate-300 dark:decoration-noir-700 underline-offset-4 hover:decoration-slate-900 dark:hover:decoration-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Rahul</a>
+    </div>
+    <span class="text-[11px] text-slate-400 dark:text-noir-700">100% Client-Side Privacy</span>
+  </footer>
+
+  <!-- Core Application Script -->
+  <script>
+    const STORAGE_KEY = 'minimal_meeting_cost_state_v2';
+    const THEME_KEY = 'meetingcost_theme';
+
+    // Application State
+    const state = {
+      status: 'idle', // 'idle' | 'running' | 'paused' | 'ended'
+      theme: 'light', // 'light' (default) | 'dark'
+      currency: '$',
+      attendees: 4,
+      ratePerHour: 75,
+      meetingTitle: '',
+      startTime: null,
+      accumulatedMs: 0,
+      optionsOpen: true
+    };
+
+    let animationFrame = null;
+
+    // DOM Elements
+    const currSymbolEl = document.getElementById('curr-symbol');
+    const rateSymbolEl = document.getElementById('rate-symbol');
+    const costDisplay = document.getElementById('cost-display');
+    const timerDisplay = document.getElementById('timer-display');
+    const burnRateHour = document.getElementById('burn-rate-hour');
+    const burnRateMin = document.getElementById('burn-rate-min');
+    const statusBadge = document.getElementById('status-badge');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const headerStatusIndicator = document.getElementById('header-status-indicator');
+
+    const btnThemeToggle = document.getElementById('btn-theme-toggle');
+    const iconSun = document.getElementById('icon-sun');
+    const iconMoon = document.getElementById('icon-moon');
+
+    const btnPrimary = document.getElementById('btn-primary');
+    const btnPrimaryIcon = document.getElementById('btn-primary-icon');
+    const btnPrimaryText = document.getElementById('btn-primary-text');
+    const btnEnd = document.getElementById('btn-end');
+    const btnReset = document.getElementById('btn-reset');
+
+    const titleInput = document.getElementById('meeting-title');
+    const attendeesInput = document.getElementById('attendees-input');
+    const rateInput = document.getElementById('rate-input');
+    const btnAttendeeMinus = document.getElementById('btn-attendee-minus');
+    const btnAttendeePlus = document.getElementById('btn-attendee-plus');
+
+    const optionsPanel = document.getElementById('options-panel');
+    const btnToggleOptions = document.getElementById('btn-toggle-options');
+    const optionsChevron = document.getElementById('options-chevron');
+
+    const receiptModal = document.getElementById('receipt-modal');
+    const receiptCard = document.getElementById('receipt-card');
+    const btnReceiptClose = document.getElementById('btn-receipt-close');
+    const btnReceiptCloseX = document.getElementById('btn-receipt-close-x');
+    const btnCopyReceipt = document.getElementById('btn-copy-receipt');
+    const copyReceiptText = document.getElementById('copy-receipt-text');
+
+    const resetModal = document.getElementById('reset-modal');
+    const btnResetCancel = document.getElementById('btn-reset-cancel');
+    const btnResetConfirm = document.getElementById('btn-reset-confirm');
+
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toast-msg');
+
+    // Theme Management
+    function applyTheme(theme) {
+      state.theme = theme;
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        iconSun.classList.remove('hidden');
+        iconMoon.classList.add('hidden');
+      } else {
+        document.documentElement.classList.remove('dark');
+        iconSun.classList.add('hidden');
+        iconMoon.classList.remove('hidden');
+      }
+      try {
+        localStorage.setItem(THEME_KEY, theme);
+      } catch (e) {}
+      renderStatusUI();
+    }
+
+    function toggleTheme() {
+      const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
+      applyTheme(nextTheme);
+      showToast(`Switched to ${nextTheme} theme`);
+    }
+
+    btnThemeToggle.addEventListener('click', toggleTheme);
+
+    // Persistence
+    function saveState() {
+      try {
+        const payload = {
+          currency: state.currency,
+          attendees: state.attendees,
+          ratePerHour: state.ratePerHour,
+          meetingTitle: state.meetingTitle,
+          status: state.status,
+          accumulatedMs: state.accumulatedMs,
+          startTime: state.status === 'running' ? state.startTime : null,
+          optionsOpen: state.optionsOpen
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch (e) {
+        // Safe fail
+      }
+    }
+
+    function loadState() {
+      // Load Theme (default to 'light' per requirements)
+      try {
+        const savedTheme = localStorage.getItem(THEME_KEY);
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+          state.theme = savedTheme;
+        } else {
+          state.theme = 'light';
+        }
+      } catch (e) {
+        state.theme = 'light';
+      }
+      applyTheme(state.theme);
+
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (data) {
+          const parsed = JSON.parse(data);
+          state.currency = parsed.currency || '$';
+          state.attendees = Math.max(1, parseInt(parsed.attendees, 10) || 4);
+          state.ratePerHour = Math.max(1, parseFloat(parsed.ratePerHour) || 75);
+          state.meetingTitle = parsed.meetingTitle || '';
+          state.accumulatedMs = parseInt(parsed.accumulatedMs, 10) || 0;
+          state.optionsOpen = parsed.optionsOpen !== undefined ? parsed.optionsOpen : true;
+
+          // If it was running prior to reload, reconcile elapsed time
+          if (parsed.status === 'running' && parsed.startTime) {
+            const elapsedSince = Date.now() - parsed.startTime;
+            state.accumulatedMs += Math.max(0, elapsedSince);
+            state.status = 'paused'; // Pause on reload to allow user explicit resume
+          } else if (parsed.status === 'paused') {
+            state.status = 'paused';
+          }
+        }
+      } catch (e) {
+        // Safe fail
+      }
+    }
+
+    // Rate Computations
+    function getCostPerMs() {
+      const totalHourly = state.attendees * state.ratePerHour;
+      return totalHourly / (3600 * 1000);
+    }
+
+    function updateBurnRate() {
+      const hourlyTotal = state.attendees * state.ratePerHour;
+      const minTotal = hourlyTotal / 60;
+      burnRateHour.textContent = `${state.currency}${hourlyTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} / hr`;
+      burnRateMin.textContent = `${state.currency}${minTotal.toFixed(2)} / min`;
+    }
+
+    function formatTime(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+    }
+
+    function updateDisplays(currentMs) {
+      timerDisplay.textContent = formatTime(currentMs);
+      const cost = currentMs * getCostPerMs();
+      costDisplay.textContent = cost.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    // Animation Tick
+    function tick() {
+      if (state.status !== 'running') return;
+      const now = Date.now();
+      const currentTotal = state.accumulatedMs + (now - state.startTime);
+      updateDisplays(currentTotal);
+      animationFrame = requestAnimationFrame(tick);
+    }
+
+    // UI State Sync
+    function renderStatusUI() {
+      if (state.status === 'running') {
+        btnPrimary.className = "w-full sm:w-auto flex-1 py-3.5 px-8 rounded-full bg-amber-400 hover:bg-amber-300 text-black font-semibold text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 cursor-pointer";
+        btnPrimaryIcon.textContent = "❚❚";
+        btnPrimaryText.textContent = "Pause Meeting";
+
+        btnEnd.disabled = false;
+        btnEnd.className = "flex-1 sm:flex-none py-3.5 px-5 rounded-full bg-slate-100 dark:bg-noir-900 text-rose-600 dark:text-rose-400 border border-slate-200 dark:border-noir-800 hover:border-rose-300 dark:hover:border-rose-500/40 hover:bg-rose-50 dark:hover:bg-rose-500/10 font-medium text-xs font-mono transition cursor-pointer";
+
+        statusBadge.className = "inline-flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-emerald-600 dark:text-emerald-400 py-0.5 px-2.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30";
+        statusDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 pulse-dot";
+        statusText.textContent = "Live Meeting";
+        headerStatusIndicator.className = "w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 pulse-dot";
+
+      } else if (state.status === 'paused') {
+        btnPrimary.className = "w-full sm:w-auto flex-1 py-3.5 px-8 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-black font-semibold text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 cursor-pointer";
+        btnPrimaryIcon.textContent = "▶";
+        btnPrimaryText.textContent = "Resume Meeting";
+
+        btnEnd.disabled = false;
+        btnEnd.className = "flex-1 sm:flex-none py-3.5 px-5 rounded-full bg-slate-100 dark:bg-noir-900 text-rose-600 dark:text-rose-400 border border-slate-200 dark:border-noir-800 hover:border-rose-300 dark:hover:border-rose-500/40 hover:bg-rose-50 dark:hover:bg-rose-500/10 font-medium text-xs font-mono transition cursor-pointer";
+
+        statusBadge.className = "inline-flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-amber-600 dark:text-amber-400 py-0.5 px-2.5 rounded-full bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30";
+        statusDot.className = "w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400";
+        statusText.textContent = "Paused";
+        headerStatusIndicator.className = "w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-400";
+
+      } else {
+        // Idle or Ended
+        btnPrimary.className = "w-full sm:w-auto flex-1 py-3.5 px-8 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-black font-semibold text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 cursor-pointer";
+        btnPrimaryIcon.textContent = "▶";
+        btnPrimaryText.textContent = "Start Meeting";
+
+        btnEnd.disabled = true;
+        btnEnd.className = "flex-1 sm:flex-none py-3.5 px-5 rounded-full bg-slate-100 dark:bg-noir-900 text-slate-300 dark:text-noir-700 border border-slate-200 dark:border-noir-800 font-medium text-xs font-mono transition cursor-not-allowed";
+
+        statusBadge.className = "inline-flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-slate-500 dark:text-noir-400 py-0.5 px-2.5 rounded-full bg-slate-100 dark:bg-noir-900 border border-slate-200 dark:border-noir-800";
+        statusDot.className = "w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-noir-700";
+        statusText.textContent = state.status === 'ended' ? "Completed" : "Standby";
+        headerStatusIndicator.className = "w-2 h-2 rounded-full bg-slate-300 dark:bg-noir-700";
+      }
+
+      // Sync currency buttons
+      document.querySelectorAll('.currency-btn').forEach(btn => {
+        if (btn.dataset.curr === state.currency) {
+          btn.className = "currency-btn px-2.5 py-1 rounded text-slate-950 dark:text-white bg-white dark:bg-noir-800 shadow-xs dark:shadow-none transition font-bold";
+        } else {
+          btn.className = "currency-btn px-2.5 py-1 rounded text-slate-500 dark:text-noir-400 hover:text-slate-900 dark:hover:text-white transition";
+        }
+      });
+
+      currSymbolEl.textContent = state.currency;
+      rateSymbolEl.textContent = state.currency;
+      titleInput.value = state.meetingTitle;
+      attendeesInput.value = state.attendees;
+      rateInput.value = state.ratePerHour;
+
+      updateBurnRate();
+      updateDisplays(state.accumulatedMs);
+    }
+
+    // Toggle Settings Panel
+    function setOptionsVisibility(show) {
+      state.optionsOpen = show;
+      if (show) {
+        optionsPanel.classList.remove('hidden');
+        optionsChevron.classList.remove('-rotate-90');
+      } else {
+        optionsPanel.classList.add('hidden');
+        optionsChevron.classList.add('-rotate-90');
+      }
+      saveState();
+    }
+
+    btnToggleOptions.addEventListener('click', () => {
+      setOptionsVisibility(optionsPanel.classList.contains('hidden'));
+    });
+
+    // Control Handlers
+    function startOrPause() {
+      if (state.status === 'idle' || state.status === 'ended') {
+        state.status = 'running';
+        state.startTime = Date.now();
+        renderStatusUI();
+        tick();
+      } else if (state.status === 'running') {
+        // Pause
+        state.status = 'paused';
+        cancelAnimationFrame(animationFrame);
+        state.accumulatedMs += Date.now() - state.startTime;
+        renderStatusUI();
+      } else if (state.status === 'paused') {
+        // Resume
+        state.status = 'running';
+        state.startTime = Date.now();
+        renderStatusUI();
+        tick();
+      }
+      saveState();
+    }
+
+    function endMeeting() {
+      if (state.status === 'running') {
+        state.accumulatedMs += Date.now() - state.startTime;
+        cancelAnimationFrame(animationFrame);
+      }
+      state.status = 'ended';
+      renderStatusUI();
+      saveState();
+      showReceipt();
+    }
+
+    function resetMeeting() {
+      cancelAnimationFrame(animationFrame);
+      state.status = 'idle';
+      state.accumulatedMs = 0;
+      state.startTime = null;
+      renderStatusUI();
+      saveState();
+      showToast('Meeting reset to zero');
+    }
+
+    // Modals & Receipts
+    function showReceipt() {
+      const totalSeconds = Math.max(1, Math.floor(state.accumulatedMs / 1000));
+      const totalMinutes = totalSeconds / 60;
+      const totalCost = state.accumulatedMs * getCostPerMs();
+      const perMinute = totalMinutes > 0 ? (totalCost / totalMinutes) : 0;
+      const perPerson = totalCost / state.attendees;
+
+      document.getElementById('receipt-topic').textContent = state.meetingTitle || 'Meeting Summary';
+      document.getElementById('receipt-total').textContent = `${state.currency}${totalCost.toFixed(2)}`;
+      document.getElementById('receipt-duration').textContent = formatTime(state.accumulatedMs);
+      document.getElementById('receipt-attendees').textContent = state.attendees;
+      document.getElementById('receipt-rate').textContent = `${state.currency}${state.ratePerHour} / hr`;
+      document.getElementById('receipt-per-minute').textContent = `${state.currency}${perMinute.toFixed(2)}`;
+      document.getElementById('receipt-per-person').textContent = `${state.currency}${perPerson.toFixed(2)}`;
+
+      receiptModal.classList.remove('hidden');
+      requestAnimationFrame(() => {
+        receiptModal.classList.remove('opacity-0');
+        receiptCard.classList.remove('scale-95', 'translate-y-4');
+        receiptCard.classList.add('scale-100', 'translate-y-0');
+      });
+    }
+
+    function closeReceipt() {
+      receiptCard.classList.remove('scale-100', 'translate-y-0');
+      receiptCard.classList.add('scale-95', 'translate-y-4');
+      receiptModal.classList.add('opacity-0');
+      setTimeout(() => receiptModal.classList.add('hidden'), 150);
+    }
+
+    btnReceiptClose.addEventListener('click', closeReceipt);
+    btnReceiptCloseX.addEventListener('click', closeReceipt);
+    receiptModal.addEventListener('click', (e) => {
+      if (e.target === receiptModal) closeReceipt();
+    });
+
+    btnCopyReceipt.addEventListener('click', () => {
+      const topic = state.meetingTitle || 'Team Meeting';
+      const cost = document.getElementById('receipt-total').textContent;
+      const duration = document.getElementById('receipt-duration').textContent;
+      const summary = `📊 Meeting Cost Summary: ${topic}\n• Total Cost: ${cost}\n• Duration: ${duration}\n• Attendees: ${state.attendees} (${state.currency}${state.ratePerHour}/hr)\n• Cost/Min: ${document.getElementById('receipt-per-minute').textContent}\n• Cost/Person: ${document.getElementById('receipt-per-person').textContent}\nCalculated via meetingcost.live`;
+
+      let copied = false;
+      try {
+        const t = document.createElement('textarea');
+        t.value = summary;
+        document.body.appendChild(t);
+        t.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(t);
+      } catch (e) {
+        copied = false;
+      }
+
+      if (!copied && navigator.clipboard) {
+        navigator.clipboard.writeText(summary);
+      }
+
+      copyReceiptText.textContent = "Copied!";
+      setTimeout(() => { copyReceiptText.textContent = "Copy Summary"; }, 1500);
+      showToast("Summary copied to clipboard");
+    });
+
+    // Reset Modal Handlers
+    btnReset.addEventListener('click', () => {
+      resetModal.classList.remove('hidden');
+      requestAnimationFrame(() => resetModal.classList.remove('opacity-0'));
+    });
+
+    btnResetCancel.addEventListener('click', () => {
+      resetModal.classList.add('opacity-0');
+      setTimeout(() => resetModal.classList.add('hidden'), 150);
+    });
+
+    btnResetConfirm.addEventListener('click', () => {
+      resetModal.classList.add('opacity-0');
+      setTimeout(() => resetModal.classList.add('hidden'), 150);
+      resetMeeting();
+    });
+
+    // Toast Utility
+    let toastTimeout;
+    function showToast(msg) {
+      toastMsg.textContent = msg;
+      toast.classList.remove('translate-y-12', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.add('translate-y-12', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 2200);
+    }
+
+    // Input Listeners
+    titleInput.addEventListener('input', (e) => {
+      state.meetingTitle = e.target.value;
+      saveState();
+    });
+
+    attendeesInput.addEventListener('input', (e) => {
+      state.attendees = Math.max(1, parseInt(e.target.value, 10) || 1);
+      updateBurnRate();
+      saveState();
+    });
+
+    btnAttendeeMinus.addEventListener('click', () => {
+      if (state.attendees > 1) {
+        state.attendees--;
+        attendeesInput.value = state.attendees;
+        updateBurnRate();
+        saveState();
+      }
+    });
+
+    btnAttendeePlus.addEventListener('click', () => {
+      state.attendees++;
+      attendeesInput.value = state.attendees;
+      updateBurnRate();
+      saveState();
+    });
+
+    rateInput.addEventListener('input', (e) => {
+      state.ratePerHour = Math.max(1, parseFloat(e.target.value) || 1);
+      updateBurnRate();
+      saveState();
+    });
+
+    // Preset Pills
+    document.querySelectorAll('.preset-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        state.attendees = parseInt(pill.dataset.attendees, 10);
+        state.ratePerHour = parseFloat(pill.dataset.rate);
+        attendeesInput.value = state.attendees;
+        rateInput.value = state.ratePerHour;
+        updateBurnRate();
+        saveState();
+        showToast("Preset loaded");
+      });
+    });
+
+    // Currency Switcher
+    document.querySelectorAll('.currency-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.currency = btn.dataset.curr;
+        renderStatusUI();
+        saveState();
+      });
+    });
+
+    // Primary Buttons
+    btnPrimary.addEventListener('click', startOrPause);
+    btnEnd.addEventListener('click', endMeeting);
+
+    // Global Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      // Ignore if user is currently typing in an input
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+        if (e.key === 'Escape') document.activeElement.blur();
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        startOrPause();
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        btnReset.click();
+      } else if (e.key === 'Escape') {
+        if (!receiptModal.classList.contains('hidden')) closeReceipt();
+        if (!resetModal.classList.contains('hidden')) btnResetCancel.click();
+      }
+    });
+
+    // Window Load
+    window.onload = function () {
+      loadState();
+      renderStatusUI();
+      setOptionsVisibility(state.optionsOpen);
+      if (state.status === 'running') {
+        tick();
+      }
+    };
+  </script>
+</body>
+</html>
